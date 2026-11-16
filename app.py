@@ -4,6 +4,7 @@ import plotly.graph_objects as go
 import plotly.express as px
 from datetime import datetime
 import json
+import hashlib
 import os
 import tempfile
 from google import genai
@@ -11,7 +12,7 @@ from dotenv import load_dotenv
 from project_health_agent import load_project_from_excel
 
 # Load environment variables from .env file
-load_dotenv(override=True)
+load_dotenv()
 
 RAG_COLORS = {'Green': '#28A745', 'Amber': '#FFC107', 'Red': '#DC3545'}
 RAG_SCORE_VALUES = {'Green': 3, 'Amber': 2, 'Red': 1}
@@ -187,6 +188,18 @@ def load_project_data():
     from project_health_agent import ProjectHealthAgent, load_project_from_excel
 
     projects = []
+    if st.session_state.get('use_sample') and not st.session_state.get('uploaded_files'):
+        sample = pd.DataFrame([{
+            'task_name': 'Synthetic sample task', 'days_delayed': 5,
+            'at_risk': 'No', 'comments': 'Some concerns about the schedule',
+            'budget_spent_pct': 35, 'completion_percentage': 30,
+            'is_critical_milestone': False,
+        }])
+        result = ProjectHealthAgent().evaluate_project(sample)
+        return [{'project_name': 'Synthetic demo project', 'overall_status': result.status,
+                 'reasoning': result.reasoning, 'category_scores': result.category_scores,
+                 'category_details': result.details, 'timestamp': datetime.now().isoformat(),
+                 'source': 'synthetic demo'}]
 
     # Only check for uploaded files in session state
     if 'uploaded_files' in st.session_state and st.session_state.uploaded_files:
@@ -385,12 +398,22 @@ def compute_portfolio_health_metrics(projects):
         'total_categories': total_categories,
     }
 
+def configured_gemini_key():
+    """Read deployment configuration without exposing it in a browser input."""
+    if os.getenv('GEMINI_API_KEY'):
+        return os.getenv('GEMINI_API_KEY')
+    try:
+        return st.secrets.get('GEMINI_API_KEY', '')
+    except (FileNotFoundError, KeyError):
+        return ''
+
+
 def get_gemini_client():
     """Create a Gemini client using API key from session state or environment."""
     if 'api_key' in st.session_state and st.session_state.api_key:
         return genai.Client(api_key=st.session_state.api_key)
 
-    api_key = os.getenv('GEMINI_API_KEY')
+    api_key = configured_gemini_key()
     if not api_key:
         return None
     return genai.Client(api_key=api_key)
@@ -1264,7 +1287,7 @@ def ai_chat_interface():
                     context += "No project data available. Please upload Excel files using the sidebar to analyze project health.\n"
                 
                 # Check session state first, then environment variable
-                api_key = st.session_state.get('api_key', os.getenv('GEMINI_API_KEY'))
+                api_key = (st.session_state.get('api_key') or configured_gemini_key())
                 if api_key:
                     try:
                         ai_response, error_code = generate_portfolio_insight(prompt, context)
@@ -1330,6 +1353,9 @@ def main():
     <div class="header-subtitle">Smart Portfolio Insights</div>
     """, unsafe_allow_html=True)
     
+    st.checkbox("Use synthetic demo project (no upload or API key needed)", key="use_sample")
+    if st.session_state.get('use_sample') and not st.session_state.get('uploaded_files'):
+        st.info("Synthetic demonstration data. This is not a real project portfolio.")
     # Load project data
     projects = load_project_data()
     
@@ -1374,12 +1400,12 @@ def main():
         
         # API Key input
         st.markdown("### API Configuration")
-        current_api_key = st.session_state.get('api_key', os.getenv('GEMINI_API_KEY', ''))
+        current_api_key = st.session_state.get('api_key', '')
         api_key_input = st.text_input(
             "Gemini API Key",
             type="password",
             value=current_api_key,
-            help="Enter your Gemini API key for AI features",
+            help="Optional session-only key. A server-configured key is never shown here.",
             key="api_key_input"
         )
         
@@ -1394,8 +1420,8 @@ def main():
             st.cache_data.clear()
             st.cache_resource.clear()
 
-        active_key = st.session_state.get('api_key') or os.getenv('GEMINI_API_KEY', '')
-        key_fingerprint = f"{active_key[:6]}...{active_key[-4:]}" if active_key else "none"
+        active_key = st.session_state.get('api_key') or configured_gemini_key()
+        key_fingerprint = hashlib.sha256(active_key.encode()).hexdigest() if active_key else 'none'
         with st.spinner("Checking AI connectivity..."):
             status = check_api_status(key_fingerprint)
         st.markdown("**AI Assistant Status**")
