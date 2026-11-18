@@ -2,6 +2,8 @@
 
 A Python learning project that reads project plans, applies rule-based Red/Amber/Green (RAG) checks, and displays the results in Streamlit. Here RAG means Red/Amber/Green, not retrieval-augmented generation.
 
+![Project health reporting demo](assets/health-app-demo.gif)
+
 Demo: https://automated-project-health-reporting-swfzzqfdr6h6bbugewzicw.streamlit.app/
 
 ## What it does
