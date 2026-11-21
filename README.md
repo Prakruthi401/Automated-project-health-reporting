@@ -1,6 +1,7 @@
+**Live app:** https://automated-project-health-reporting-swfzzqfdr6h6bbugewzicw.streamlit.app/
+
 # Project Health Reporting
 
-**Live app:** https://automated-project-health-reporting-swfzzqfdr6h6bbugewzicw.streamlit.app/
 
 A Python learning project that reads project plans, applies rule-based Red/Amber/Green (RAG) checks, and displays the results in Streamlit. Here RAG means Red/Amber/Green, not retrieval-augmented generation.
 
