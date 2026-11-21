@@ -38,7 +38,6 @@ GEMINI_MODEL_FALLBACKS = [
 # Page configuration
 st.set_page_config(
     page_title="Project Health Dashboard",
-    page_icon="📊",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -1426,15 +1425,15 @@ def main():
             status = check_api_status(key_fingerprint)
         st.markdown("**AI Assistant Status**")
         if status["status"] == "connected":
-            st.success(f"✅ {status['message']}")
+            st.success(status["message"])
         elif status["status"] == "quota_exceeded":
-            st.warning("⚠️ " + status["message"])
+            st.warning(status["message"])
         elif status["status"] == "invalid_key":
-            st.error("❌ " + status["message"])
+            st.error(status["message"])
         elif status["status"] == "not_configured":
-            st.info("ℹ️ " + status["message"])
+            st.info("ℹ" + status["message"])
         else:
-            st.warning("⚠️ " + status["message"])
+            st.warning(status["message"])
         
         st.markdown("### Upload Project Data")
         st.markdown("Upload Excel files (.xlsx, .xls) to analyze project health")
@@ -1462,7 +1461,7 @@ def main():
                 st.session_state.uploaded_files = uploaded_files
             
             # Show column detection for each uploaded file
-            with st.expander("📋 View Detected Columns"):
+            with st.expander("View Detected Columns"):
                 for uploaded_file in uploaded_files:
                     try:
                         import pandas as pd
@@ -1531,12 +1530,12 @@ def main():
 
                 st.markdown("### Executive Presentation Preview")
 
-                with st.expander("📊 Slide 1: Title & Overview", expanded=True):
+                with st.expander("Slide 1: Title & Overview", expanded=True):
                     st.markdown(f"### Project Health Executive Summary")
                     st.markdown(f"**Portfolio Health Score (Weighted KPI): {weighted_score}%**  ·  Health Index {health_index}%  ·  Green Parameters {category_rollup}%  ·  {datetime.now().strftime('%B %d, %Y')}")
                     st.markdown(f"_Project Rollup (fully-green projects): {project_rollup}% — {green_count}/{total_projects} projects Green, {amber_count} Amber, {red_count} Red_")
 
-                with st.expander("📈 Slide 2: Portfolio Overview"):
+                with st.expander("Slide 2: Portfolio Overview"):
                     col1, col2, col3, col4 = st.columns(4)
                     col1.metric("Total Projects", total_projects)
                     col2.metric("Weighted KPI", f"{weighted_score}%")
@@ -1548,7 +1547,7 @@ def main():
                     verdict = 'HEALTHY' if weighted_score >= 75 else 'MODERATE RISK' if weighted_score >= 50 else 'HIGH RISK'
                     st.markdown(f"**Portfolio Status:** {verdict}")
 
-                with st.expander("⚠️ Slide 3: Key Risks & Highlights"):
+                with st.expander("Slide 3: Key Risks & Highlights"):
                     red_projects = [p for p in projects_data if (p.get('overall_status') or '').strip().title() == 'Red']
                     amber_projects = [p for p in projects_data if (p.get('overall_status') or '').strip().title() == 'Amber']
                     green_projects = [p for p in projects_data if (p.get('overall_status') or '').strip().title() == 'Green']
@@ -1568,24 +1567,22 @@ def main():
                     if not red_projects and not amber_projects and not green_projects:
                         st.info("No project data available for risk analysis.")
 
-                with st.expander("📋 Slide 4: Project Status Details"):
+                with st.expander("Slide 4: Project Status Details"):
                     for project in projects_data:
                         raw_status = (project.get('overall_status') or 'Unknown').strip().title()
-                        status_emoji = "🟢" if raw_status == 'Green' else "🟡" if raw_status == 'Amber' else "🔴"
-                        st.markdown(f"**{status_emoji} {project.get('project_name', 'Unknown')} — {raw_status}**")
+                        st.markdown(f"**{project.get('project_name', 'Unknown')} — {raw_status}**")
                         st.markdown(f"_{_clean_reasoning(project.get('reasoning'), 260)}_")
                         category_scores = project.get('category_scores', {}) or {}
                         cat_rows = []
                         for category in ["Schedule", "Blockages", "Stakeholder Attitude", "Budget Burn"]:
                             score = (category_scores.get(category) or '').strip().title()
                             if score:
-                                score_emoji = "🟢" if score == 'Green' else "🟡" if score == 'Amber' else "🔴"
-                                cat_rows.append(f"{score_emoji} {category}: {score}")
+                                cat_rows.append(f"{category}: {score}")
                         if cat_rows:
                             st.markdown(" &nbsp; &nbsp; | &nbsp; &nbsp; ".join(cat_rows))
                         st.markdown("---")
 
-                with st.expander("💡 Slide 5: Trends & Insights"):
+                with st.expander("Slide 5: Trends & Insights"):
                     sc = lambda s: (s or '').strip().title()
                     schedule_issues = sum(1 for p in projects_data if sc((p.get('category_scores') or {}).get('Schedule')) in ['Red', 'Amber'])
                     budget_issues = sum(1 for p in projects_data if sc((p.get('category_scores') or {}).get('Budget Burn')) in ['Red', 'Amber'])
@@ -1599,7 +1596,7 @@ def main():
                     st.markdown(f"• Stakeholders: **{stakeholder_issues}** project(s) with attitude flags — increase communication cadence.")
                     st.markdown("*Portfolio health is driven primarily by schedule adherence. Focus recovery first on late critical-path milestones; confirm Duration and % Complete are updated weekly.*")
 
-                with st.expander("🎯 Slide 6: Strategic Recommendations"):
+                with st.expander("Slide 6: Strategic Recommendations"):
                     red_projects = [p for p in projects_data if (p.get('overall_status') or '').strip().title() == 'Red']
                     amber_projects = [p for p in projects_data if (p.get('overall_status') or '').strip().title() == 'Amber']
                     st.markdown("**IMMEDIATE ACTIONS (This Week):**")
@@ -1616,7 +1613,7 @@ def main():
                     st.markdown("• Proactive stakeholder communication for Amber/Red projects (bi-weekly minimum)")
                     st.markdown("• Resource allocation adjustments based on schedule priority and baseline gaps")
 
-                with st.expander("📅 Slide 7: Next Steps"):
+                with st.expander("Slide 7: Next Steps"):
                     st.markdown("**IMMEDIATE (This Week):**")
                     st.markdown("• Review critical project recovery plans for Red items")
                     st.markdown("• Schedule stakeholder update meetings for Amber/Red projects")
@@ -1632,7 +1629,7 @@ def main():
                 st.markdown("---")
                 try:
                     st.download_button(
-                        label="📥 Download Full PowerPoint Presentation",
+                        label="Download Full PowerPoint Presentation",
                         data=pptx_bytes,
                         file_name=pptx_filename,
                         mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
@@ -1644,7 +1641,7 @@ def main():
                         try:
                             with open(filepath, 'rb') as f:
                                 st.download_button(
-                                    label="📥 Download Full PowerPoint Presentation (Fallback)",
+                                    label="Download Full PowerPoint Presentation (Fallback)",
                                     data=f.read(),
                                     file_name=os.path.basename(filepath),
                                     mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
@@ -1812,16 +1809,16 @@ def main():
                         category_scores = selected_project.get('category_scores', {})
                         
                         if category_scores.get('Schedule') in ['Red', 'Amber']:
-                            st.markdown(f"🔴 **Schedule ({category_scores.get('Schedule')})**: Check 'Variance' or 'days_delayed' columns for delays > 10 days (Red) or 0-10 days (Amber)")
+                            st.markdown(f"**Schedule ({category_scores.get('Schedule')})**: Check 'Variance' or 'days_delayed' columns for delays > 10 days (Red) or 0-10 days (Amber)")
                         
                         if category_scores.get('Blockages') in ['Red', 'Amber']:
-                            st.markdown(f"🔴 **Blockages ({category_scores.get('Blockages')})**: Check 'At Risk?' column - 'Yes' indicates Red status")
+                            st.markdown(f"**Blockages ({category_scores.get('Blockages')})**: Check 'At Risk?' column - 'Yes' indicates Red status")
                         
                         if category_scores.get('Stakeholder Attitude') in ['Red', 'Amber']:
-                            st.markdown(f"🔴 **Stakeholder Attitude ({category_scores.get('Stakeholder Attitude')})**: Check 'Comments' or 'Status Comment' columns for negative keywords")
+                            st.markdown(f"**Stakeholder Attitude ({category_scores.get('Stakeholder Attitude')})**: Check 'Comments' or 'Status Comment' columns for negative keywords")
                         
                         if category_scores.get('Budget Burn') in ['Red', 'Amber']:
-                            st.markdown(f"🔴 **Budget Burn ({category_scores.get('Budget Burn')})**: Check budget variance - >15% over expected is Red, 5-15% is Amber")
+                            st.markdown(f"**Budget Burn ({category_scores.get('Budget Burn')})**: Check budget variance - >15% over expected is Red, 5-15% is Amber")
                         
                         # Show specific columns that matter
                         st.markdown("**Key Columns to Check:**")
