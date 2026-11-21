@@ -1483,7 +1483,7 @@ def main():
             
             if current_names != new_names:
                 st.session_state.uploaded_files = uploaded_files
-                st.success(f"{len(uploaded_files)} file(s) uploaded successfully. Dashboard will update automatically.")
+                st.success(f"{len(uploaded_files)} file(s) uploaded successfully. Click Refresh Data below to update the dashboard.")
                 # Clear all caches to ensure fresh data processing
                 st.cache_data.clear()
             else:
