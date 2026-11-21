@@ -7,6 +7,7 @@ import json
 import hashlib
 import os
 import tempfile
+import time
 from google import genai
 from dotenv import load_dotenv
 from project_health_agent import load_project_from_excel
@@ -25,14 +26,12 @@ CATEGORY_WEIGHTS = {
 }
 WEIGHTED_STATUS_PCT = {'Green': 100, 'Amber': 50, 'Red': 0}
 
+# Models tried in this order. If one is busy or retired the next one is used.
 GEMINI_MODEL_FALLBACKS = [
-    'gemini-2.5-flash',
-    'gemini-flash-latest',
-    'gemini-2.0-flash',
-    'gemini-2.5-pro',
-    'gemini-pro-latest',
     'gemini-3.1-flash-lite',
-    'gemini-3.5-flash',
+    'gemini-3-flash-preview',
+    'gemini-flash-lite-latest',
+    'gemini-3.1-flash-lite-preview',
 ]
 
 # Page configuration
@@ -418,6 +417,20 @@ def get_gemini_client():
     return genai.Client(api_key=api_key)
 
 
+def classify_gemini_error(error_msg):
+    """Bucket a raw Gemini exception string so the UI can show a plain message."""
+    if ('401' in error_msg or '403' in error_msg or 'API_KEY' in error_msg
+            or 'PERMISSION_DENIED' in error_msg or 'INVALID' in error_msg.upper()):
+        return 'invalid_key'
+    if '429' in error_msg or 'RESOURCE_EXHAUSTED' in error_msg or 'quota' in error_msg.lower():
+        return 'quota'
+    if '503' in error_msg or 'UNAVAILABLE' in error_msg:
+        return 'busy'
+    if '404' in error_msg or 'NOT_FOUND' in error_msg:
+        return 'not_found'
+    return 'other'
+
+
 @st.cache_data(show_spinner=False, ttl=300)
 def check_api_status(api_key_identifier):
     """Probe Gemini connectivity with the active key and return a status dict.
@@ -433,44 +446,55 @@ def check_api_status(api_key_identifier):
             "message": "No API key configured — add a key to enable AI insights.",
         }
 
-    probe_models = GEMINI_MODEL_FALLBACKS
-
-    last_message = "All known models are currently unavailable."
     auth_hit = False
     quota_hit = False
+    busy_hit = False
 
-    for model_name in probe_models:
-        try:
-            response = client.models.generate_content(
-                model=model_name,
-                contents="Respond with exactly: OK"
-            )
-            text = extract_gemini_text(response)
-            if text or response is not None:
-                return {
-                    "ok": True,
-                    "status": "connected",
-                    "message": f"Connected via {model_name}. AI features ready.",
-                    "model": model_name,
-                }
-        except Exception as e:
-            error_msg = str(e)
-            if '401' in error_msg or '403' in error_msg or 'API_KEY' in error_msg or 'INVALID' in error_msg.upper():
-                auth_hit = True
-                last_message = "Invalid API key — please verify the key value or generate a new one at https://aistudio.google.com/apikey"
-            elif '429' in error_msg or 'RESOURCE_EXHAUSTED' in error_msg or 'quota' in error_msg.lower():
-                quota_hit = True
-                last_message = "Quota reached — the key is valid but the current plan has no remaining requests. Wait briefly or enable billing at https://console.cloud.google.com/apis/api/generativelanguage.googleapis.com"
-            elif '404' in error_msg or 'NOT_FOUND' in error_msg:
-                continue
-            else:
-                last_message = f"Model {model_name} error: {error_msg[:200]}"
+    for model_name in GEMINI_MODEL_FALLBACKS:
+        for attempt in range(2):
+            try:
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents="Respond with exactly: OK"
+                )
+                text = extract_gemini_text(response)
+                if text or response is not None:
+                    return {
+                        "ok": True,
+                        "status": "connected",
+                        "message": f"Connected via {model_name}. AI features ready.",
+                        "model": model_name,
+                    }
+                break
+            except Exception as e:
+                kind = classify_gemini_error(str(e))
+                if kind == 'invalid_key':
+                    # a bad key fails on every model, so stop early
+                    auth_hit = True
+                    break
+                if kind == 'quota':
+                    quota_hit = True
+                    break
+                if kind == 'busy':
+                    busy_hit = True
+                    if attempt == 0:
+                        time.sleep(1.5)
+                        continue
+                    break
+                # retired or unknown model: move to the next one
+                break
 
     if auth_hit:
-        return {"ok": False, "status": "invalid_key", "message": last_message}
+        return {"ok": False, "status": "invalid_key",
+                "message": "The Gemini key was rejected. Check the key in Settings, or clear it to use the server key."}
     if quota_hit:
-        return {"ok": False, "status": "quota_exceeded", "message": last_message}
-    return {"ok": False, "status": "unavailable", "message": last_message}
+        return {"ok": False, "status": "quota_exceeded",
+                "message": "The Gemini quota is used up for now. Wait a bit and try again, or paste a different key above."}
+    if busy_hit:
+        return {"ok": False, "status": "busy",
+                "message": "Gemini is busy right now. Please try again in a minute."}
+    return {"ok": False, "status": "unavailable",
+            "message": "None of the configured Gemini models are available right now."}
 
 def extract_gemini_text(response):
     """Safely extract text from a Gemini response object."""
@@ -507,38 +531,41 @@ User Question: {prompt}
 
 Provide a concise, actionable response focusing on insights and recommendations."""
 
-    models_to_try = GEMINI_MODEL_FALLBACKS
-
-    auth_error = False
     quota_error = False
-    last_error_msg = ""
+    busy_error = False
 
-    for model_name in models_to_try:
-        try:
-            response = client.models.generate_content(
-                model=model_name,
-                contents=gemini_prompt
-            )
-            text = extract_gemini_text(response)
-            if text:
-                return text, None
-        except Exception as e:
-            error_msg = str(e)
-            last_error_msg = error_msg
-            if '404' in error_msg or 'NOT_FOUND' in error_msg:
-                continue
-            if 'API_KEY' in error_msg or '401' in error_msg or '403' in error_msg or 'INVALID' in error_msg.upper():
-                auth_error = True
-                continue
-            if '429' in error_msg or 'RESOURCE_EXHAUSTED' in error_msg or 'quota' in error_msg.lower():
-                quota_error = True
-                continue
-            continue
+    for model_name in GEMINI_MODEL_FALLBACKS:
+        for attempt in range(2):
+            try:
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=gemini_prompt
+                )
+                text = extract_gemini_text(response)
+                if text:
+                    return text, None
+                break
+            except Exception as e:
+                kind = classify_gemini_error(str(e))
+                if kind == 'invalid_key':
+                    # a bad key fails on every model, so stop early
+                    return None, 'invalid_api_key'
+                if kind == 'quota':
+                    quota_error = True
+                    break
+                if kind == 'busy':
+                    busy_error = True
+                    if attempt == 0:
+                        time.sleep(1.5)
+                        continue
+                    break
+                # retired or unknown model: move to the next one
+                break
 
-    if auth_error:
-        return None, 'invalid_api_key'
     if quota_error:
         return None, 'quota_exceeded'
+    if busy_error:
+        return None, 'busy'
     return None, 'model_not_found'
 
 def load_project_excel_mapped(project_name):
@@ -1309,6 +1336,8 @@ def ai_chat_interface():
                                 "2. Upgrade the associated Google Cloud project to a paid tier\n"
                                 "3. Swap in a different API key from another Google account\n"
                             )
+                        elif error_code == 'busy':
+                            ai_response = "Gemini is busy right now. Please try again in a minute."
                         elif error_code == 'empty_response':
                             st.error("Gemini returned an empty response. Please try again.")
                             ai_response = "I couldn't generate a response this time. Please try again."
