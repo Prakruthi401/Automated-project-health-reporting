@@ -1431,7 +1431,7 @@ def main():
         elif status["status"] == "invalid_key":
             st.error(status["message"])
         elif status["status"] == "not_configured":
-            st.info("ℹ" + status["message"])
+            st.info(status["message"])
         else:
             st.warning(status["message"])
         
